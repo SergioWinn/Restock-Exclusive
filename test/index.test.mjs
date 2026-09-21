@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { detectRestocks, formatEventMemberSummary, formatStockSummary, parseStocks } from "../src/logic.ts";
+import { detectRestocks, formatEventMemberSummary, formatStockSummary, parseStocks, splitTelegramText } from "../src/logic.ts";
 import { handleCommand, isActive, timerAction } from "../src/control.ts";
 
 const event = { code: "EXTEST", title: "Meet & Greet", category: "PHOTOCARD" };
@@ -63,8 +63,8 @@ test("summarizes stock totals by event and product kind", () => {
     events: ["MNG", "TS", "VC"],
     errors: [],
     items: {
-      a: { ...event, eventCode: "MNG", eventTitle: "Festival MnG", category: "PHOTOCARD", date: "2026-10-24", member: "Member A", quota: 2 },
-      b: { ...event, eventCode: "MNG", eventTitle: "Festival MnG", category: "PHOTOCARD", date: "2026-10-24", member: "Member A", quota: 3 },
+      a: { ...event, eventCode: "MNG", eventTitle: "Festival MnG", category: "PHOTOCARD", date: "2026-10-24", session: "Sesi 1", startTime: "10:00", lane: "Jalur 1", member: "Member A", quota: 2 },
+      b: { ...event, eventCode: "MNG", eventTitle: "Festival MnG", category: "PHOTOCARD", date: "2026-10-24", session: "Sesi 2", startTime: "13:00", lane: "Jalur 2", member: "Member A", quota: 3 },
       c: { ...event, eventCode: "TS", eventTitle: "Festival 2Shot", category: "TWO_SHOT", member: "Member B", quota: 7 },
       d: { ...event, eventCode: "VC", eventTitle: "Video Call", category: "DIGITAL_PHOTOBOOK", member: "Member C", quota: 9 },
     },
@@ -75,6 +75,15 @@ test("summarizes stock totals by event and product kind", () => {
   assert.doesNotMatch(summary, /Festival 2Shot/);
   assert.doesNotMatch(summary, /belum live/);
   const members = formatEventMemberSummary(snapshot, "MNG", Date.parse("2026-09-21T10:10:00.000Z"));
-  assert.match(members, /Member A — 5 tersisa \(2 slot\)/);
+  assert.match(members, /24 Okt 2026 · Sesi 1 \(10:00 WIB\)/);
+  assert.match(members, /Jalur 1 · Member A — 2 tersisa/);
+  assert.match(members, /Sesi 2 \(13:00 WIB\)/);
+  assert.match(members, /Jalur 2 · Member A — 3 tersisa/);
+  assert.doesNotMatch(members, /5 tersisa/);
   assert.doesNotMatch(members, /Festival 2Shot/);
+});
+
+test("splits long Telegram details without dropping lines", () => {
+  const message = ["header", "first row", "second row"].join("\n");
+  assert.deepEqual(splitTelegramText(message, 16), ["header\nfirst row", "second row"]);
 });

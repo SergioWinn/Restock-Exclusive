@@ -1,6 +1,6 @@
 import { handleCommand, isActive, timerAction } from "./control";
 import type { MonitorState } from "./control";
-import { formatEventMemberSummary, formatStockSummary, stockEvents } from "./logic";
+import { formatEventMemberSummary, formatStockSummary, splitTelegramText, stockEvents } from "./logic";
 import type { Snapshot, StockKind } from "./logic";
 import profilePhoto from "./bot-profile.bin";
 
@@ -110,7 +110,10 @@ async function sendStock(env: Env, kind: StockKind): Promise<void> {
 
 async function sendEventStock(env: Env, eventCode: string): Promise<void> {
   const snapshot = await env.STATE.get<Snapshot>(SNAPSHOT_KEY, "json");
-  await sendTelegram(env, formatEventMemberSummary(snapshot, eventCode), stockKeyboard);
+  const pages = splitTelegramText(formatEventMemberSummary(snapshot, eventCode));
+  for (const [index, page] of pages.entries()) {
+    await sendTelegram(env, page, index === pages.length - 1 ? stockKeyboard : undefined);
+  }
 }
 
 async function answerCallback(env: Env, callbackQueryId: string): Promise<void> {

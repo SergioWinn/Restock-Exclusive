@@ -144,17 +144,14 @@ export function formatEventMemberSummary(snapshot: Snapshot | null, eventCode: s
   const stocks = Object.values(snapshot.items).filter((stock) => stock.eventCode === eventCode);
   if (!stocks.length) return "Event tidak ditemukan pada snapshot stok.";
 
-  const members = new Map<string, { quota: number; slots: number }>();
-  for (const stock of stocks) {
-    const member = members.get(stock.member) ?? { quota: 0, slots: 0 };
-    member.quota += stock.quota;
-    member.slots += 1;
-    members.set(stock.member, member);
-  }
-  const available = [...members.entries()]
-    .filter(([, value]) => value.quota > 0)
-    .sort(([a], [b]) => a.localeCompare(b, "id-ID"));
-  const soldOut = members.size - available.length;
+  const available = stocks
+    .filter((stock) => stock.quota > 0)
+    .sort((a, b) => a.date.localeCompare(b.date)
+      || a.startTime.localeCompare(b.startTime)
+      || a.session.localeCompare(b.session, "id-ID")
+      || a.lane.localeCompare(b.lane, "id-ID")
+      || a.member.localeCompare(b.member, "id-ID"));
+  const soldOut = stocks.length - available.length;
   const checkedAt = new Intl.DateTimeFormat("id-ID", {
     timeZone: "Asia/Jakarta",
     day: "2-digit",
@@ -164,12 +161,44 @@ export function formatEventMemberSummary(snapshot: Snapshot | null, eventCode: s
     hourCycle: "h23",
   }).format(new Date(snapshot.checkedAt));
   const stale = nowMs - Date.parse(snapshot.checkedAt) > 15 * 60_000 ? "⚠️ Data belum live/lebih dari 15 menit.\n" : "";
-  const lines = available.map(([name, value]) => `• ${name} — ${value.quota} tersisa (${value.slots} slot)`);
+  const sessions = new Map<string, Stock[]>();
+  for (const stock of available) {
+    const key = [stock.date, stock.startTime, stock.session].join("|");
+    sessions.set(key, [...(sessions.get(key) ?? []), stock]);
+  }
+  const lines = [...sessions.values()].flatMap((sessionStocks) => {
+    const first = sessionStocks[0];
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(first.date)
+      ? new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${first.date}T00:00:00+07:00`))
+      : first.date || "Tanggal tidak tersedia";
+    const session = first.session || "Sesi";
+    const time = first.startTime ? ` (${first.startTime} WIB)` : "";
+    return [
+      `📅 ${date} · ${session}${time}`,
+      ...sessionStocks.map((stock) => `• ${stock.lane || "Tanpa jalur"} · ${stock.member} — ${stock.quota} tersisa`),
+      "",
+    ];
+  });
   return [
-    `👤 ${stocks[0].eventTitle}`,
+    `📋 ${stocks[0].eventTitle}`,
     `Diperbarui: ${checkedAt} WIB`,
     stale,
-    lines.length ? lines.join("\n") : "Semua member habis.",
-    soldOut ? `\n${soldOut} member tanpa stok.` : "",
+    lines.length ? lines.join("\n").trimEnd() : "Semua sesi/member habis.",
+    soldOut ? `\n${soldOut} slot tanpa stok.` : "",
   ].filter(Boolean).join("\n");
+}
+
+export function splitTelegramText(message: string, limit = 3_900): string[] {
+  const pages: string[] = [];
+  let page = "";
+  for (const line of message.split("\n")) {
+    if (`${page}${page ? "\n" : ""}${line}`.length <= limit) {
+      page += `${page ? "\n" : ""}${line}`;
+      continue;
+    }
+    if (page) pages.push(page);
+    page = line;
+  }
+  if (page) pages.push(page);
+  return pages;
 }
