@@ -1,8 +1,8 @@
 # JKT48 Restock Notifier
 
-Cloudflare Worker dan GitHub Actions yang memeriksa stok Meet & Greet, 2Shot, dan Video Call setiap 10 menit lalu mengirim restock ke Telegram.
+Cloudflare Worker dan GitHub Actions untuk memeriksa stok Meet & Greet, 2Shot, dan Video Call lalu mengirim restock ke Telegram.
 
-GitHub Actions dipakai untuk membaca API karena request langsung dari Cloudflare Worker terkena Managed Challenge. Saat bot `/off`, workflow berhenti sebelum mengakses JKT48.
+> Jadwal otomatis dinonaktifkan: request Cloudflare Worker maupun GitHub Actions sama-sama ditolak oleh Managed Challenge JKT48. Workflow manual dipertahankan untuk pengujian jika upstream membuka akses resmi.
 
 ## Data yang perlu disiapkan
 
@@ -40,7 +40,7 @@ Masukkan nilai secret hanya ketika prompt Wrangler muncul. Tambahkan nilai `INGE
 npx wrangler tail
 ```
 
-Kirim `/on 3h`, lalu tunggu maksimal 10 menit atau jalankan workflow **Poll JKT48 stock** secara manual. Run pertama membuat baseline dan tidak mengirim notifikasi.
+Kirim `/on 3h`, lalu jalankan workflow **Poll JKT48 stock** secara manual. Run pertama membuat baseline dan tidak mengirim notifikasi. Aktifkan jadwal hanya setelah tersedia akses API resmi/whitelist dari JKT48.
 
 ## Perintah lokal
 
