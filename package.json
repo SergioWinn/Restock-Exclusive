@@ -1,0 +1,18 @@
+{
+  "name": "jkt48-restock-notifier",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npm run types && tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --test-scheduled",
+    "test": "node --test",
+    "types": "wrangler types --env-file .dev.vars.example"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260921.1",
+    "@types/node": "^26.6.2",
+    "typescript": "latest",
+    "wrangler": "latest"
+  }
+}
