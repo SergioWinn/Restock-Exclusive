@@ -1,8 +1,8 @@
 # JKT48 Restock Notifier
 
-Cloudflare Worker yang memeriksa stok Meet & Greet, 2Shot, dan Video Call setiap menit lalu mengirim perubahan kuota ke Telegram.
+Cloudflare Worker dan GitHub Actions yang memeriksa stok Meet & Greet, 2Shot, dan Video Call setiap 10 menit lalu mengirim restock ke Telegram.
 
-> Status saat ini: Worker, KV, dan Telegram sudah terkonfigurasi, tetapi Cron dinonaktifkan karena endpoint JKT48 mengembalikan Cloudflare Managed Challenge (`403`, `cf-mitigated=challenge`) untuk eksekusi Cron produksi. Aktifkan kembali hanya setelah tersedia akses API resmi/whitelist dari upstream.
+GitHub Actions dipakai untuk membaca API karena request langsung dari Cloudflare Worker terkena Managed Challenge. Saat bot `/off`, workflow berhenti sebelum mengakses JKT48.
 
 ## Data yang perlu disiapkan
 
@@ -28,10 +28,11 @@ npx wrangler login
 npm run check
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 npx wrangler secret put TELEGRAM_CHAT_ID
+npx wrangler secret put INGEST_TOKEN
 npm run deploy
 ```
 
-Masukkan nilai secret hanya ketika prompt Wrangler muncul. Deployment pertama otomatis membuat namespace KV dan menuliskan ID-nya ke `wrangler.jsonc`.
+Masukkan nilai secret hanya ketika prompt Wrangler muncul. Tambahkan nilai `INGEST_TOKEN` yang sama di GitHub: **Settings → Secrets and variables → Actions → New repository secret**.
 
 ## Verifikasi
 
@@ -39,7 +40,7 @@ Masukkan nilai secret hanya ketika prompt Wrangler muncul. Deployment pertama ot
 npx wrangler tail
 ```
 
-Setelah akses upstream tersedia dan Cron diaktifkan kembali, tunggu run berikutnya. Run pertama membuat baseline dan tidak mengirim notifikasi. Buka URL `workers.dev` hasil deployment untuk melihat waktu pemeriksaan terakhir dan error API terakhir.
+Kirim `/on 3h`, lalu tunggu maksimal 10 menit atau jalankan workflow **Poll JKT48 stock** secara manual. Run pertama membuat baseline dan tidak mengirim notifikasi.
 
 ## Perintah lokal
 

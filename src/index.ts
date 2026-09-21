@@ -1,6 +1,6 @@
 import { handleCommand, isActive, timerAction } from "./control";
 import type { MonitorState } from "./control";
-import { formatEventMemberSummary, formatStockSummary, splitTelegramText, stockEvents } from "./logic";
+import { detectRestocks, formatEventMemberSummary, formatRestockSummary, formatStockSummary, snapshotFromIngest, splitTelegramText, stockEvents } from "./logic";
 import type { Snapshot, StockKind } from "./logic";
 import profilePhoto from "./bot-profile.bin";
 
@@ -130,6 +130,47 @@ function sameSecret(received: string, expected: string): boolean {
   return left.byteLength === right.byteLength && crypto.subtle.timingSafeEqual(left, right);
 }
 
+function ingestAuthorized(request: Request, env: Env): boolean {
+  const authorization = request.headers.get("Authorization") ?? "";
+  return Boolean(env.INGEST_TOKEN) && authorization.startsWith("Bearer ")
+    && sameSecret(authorization.slice(7), env.INGEST_TOKEN);
+}
+
+async function pollStatus(request: Request, env: Env): Promise<Response> {
+  if (!ingestAuthorized(request, env)) return new Response("Unauthorized", { status: 401 });
+  const [control, snapshot] = await Promise.all([
+    env.STATE.get<MonitorState>(CONTROL_KEY, "json"),
+    env.STATE.get<Snapshot>(SNAPSHOT_KEY, "json"),
+  ]);
+  return Response.json({
+    active: isActive(control),
+    trackedEventCodes: [...new Set(Object.values(snapshot?.items ?? {}).map((stock) => stock.eventCode))],
+  });
+}
+
+async function ingestSnapshot(request: Request, env: Env): Promise<Response> {
+  if (!ingestAuthorized(request, env)) return new Response("Unauthorized", { status: 401 });
+  if (Number(request.headers.get("content-length") ?? 0) > 1_000_000) return new Response("Payload too large", { status: 413 });
+  const control = await env.STATE.get<MonitorState>(CONTROL_KEY, "json");
+  if (!isActive(control)) return new Response("Monitoring is off", { status: 409 });
+
+  try {
+    const payload: unknown = await request.json();
+    const categories = new Set(env.MONITORED_CATEGORIES.split(",").map((value) => value.trim()).filter(Boolean));
+    const current = snapshotFromIngest(payload, categories, new Date().toISOString());
+    const previous = await env.STATE.get<Snapshot>(SNAPSHOT_KEY, "json");
+    const restocks = detectRestocks(previous, current);
+    await env.STATE.put(SNAPSHOT_KEY, JSON.stringify(current));
+    for (const page of splitTelegramText(formatRestockSummary(restocks))) {
+      if (restocks.length) await sendTelegram(env, page);
+    }
+    return Response.json({ ok: true, events: current.events.length, stocks: Object.keys(current.items).length, restocks: restocks.length });
+  } catch (error) {
+    console.error(JSON.stringify({ message: "invalid stock ingest", error: error instanceof Error ? error.message : String(error) }));
+    return new Response("Invalid payload", { status: 400 });
+  }
+}
+
 async function telegramWebhook(request: Request, env: Env): Promise<Response> {
   const secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token") ?? "";
   if (!sameSecret(secret, env.TELEGRAM_WEBHOOK_SECRET)) return new Response("Unauthorized", { status: 401 });
@@ -199,6 +240,8 @@ export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/telegram" && request.method === "POST") return telegramWebhook(request, env);
+    if (url.pathname === "/poll-status" && request.method === "GET") return pollStatus(request, env);
+    if (url.pathname === "/ingest" && request.method === "POST") return ingestSnapshot(request, env);
     if (url.pathname !== "/" || request.method !== "GET") return new Response("Not found", { status: 404 });
 
     const snapshot = await env.STATE.get<Snapshot>(SNAPSHOT_KEY, "json");

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { detectRestocks, formatEventMemberSummary, formatStockSummary, parseStocks, splitTelegramText } from "../src/logic.ts";
+import { detectRestocks, formatEventMemberSummary, formatRestockSummary, formatStockSummary, parseStocks, snapshotFromIngest, splitTelegramText } from "../src/logic.ts";
 import { handleCommand, isActive, timerAction } from "../src/control.ts";
+import { selectEvents } from "../scripts/poll.mjs";
 
 const event = { code: "EXTEST", title: "Meet & Greet", category: "PHOTOCARD" };
 
@@ -86,4 +87,27 @@ test("summarizes stock totals by event and product kind", () => {
 test("splits long Telegram details without dropping lines", () => {
   const message = ["header", "first row", "second row"].join("\n");
   assert.deepEqual(splitTelegramText(message, 16), ["header\nfirst row", "second row"]);
+});
+
+test("builds and formats an authenticated ingest snapshot", () => {
+  const snapshot = snapshotFromIngest({ results: [{
+    event,
+    bonus: { data: [{ label: "Sesi 1", date: "2026-09-21", start_time: "10:00:00", session_members: [{
+      session_detail_code: "slot", label: "Jalur 1", member_name: "Member A", available_quota: 4,
+    }] }] },
+  }] }, new Set(["PHOTOCARD"]), "2026-09-21T10:00:00.000Z");
+
+  assert.equal(snapshot.items.slot.quota, 4);
+  assert.match(formatRestockSummary([snapshot.items.slot]), /Sesi 1 \(10:00 WIB\)/);
+  assert.throws(() => snapshotFromIngest({ results: [{ event, bonus: {} }] }, new Set(["PHOTOCARD"]), "now"));
+});
+
+test("poller selects recent and already tracked events only", () => {
+  const payload = { data: { data: [
+    { code: "RECENT", title: "Recent", category: "PHOTOCARD", valid_date_from: "2026-09-10T00:00:00Z" },
+    { code: "TRACKED", title: "Tracked", category: "TWO_SHOT", valid_date_from: "2025-01-01T00:00:00Z" },
+    { code: "OLD", title: "Old", category: "DIGITAL_PHOTOBOOK", valid_date_from: "2025-01-01T00:00:00Z" },
+    { code: "OTHER", title: "Other", category: "MERCH", valid_date_from: "2026-09-20T00:00:00Z" },
+  ] } };
+  assert.deepEqual(selectEvents(payload, ["TRACKED"], Date.parse("2026-09-21T00:00:00Z")).map((item) => item.code), ["RECENT", "TRACKED"]);
 });

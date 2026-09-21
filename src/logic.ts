@@ -92,6 +92,35 @@ export function detectRestocks(previous: Snapshot | null, current: Snapshot): St
   });
 }
 
+export function snapshotFromIngest(payload: unknown, categories: Set<string>, checkedAt: string): Snapshot {
+  const results = record(payload)?.results;
+  if (!Array.isArray(results) || results.length > 30) throw new Error("Invalid ingest results");
+
+  const events: string[] = [];
+  const items: Record<string, Stock> = {};
+  for (const rawResult of results) {
+    const result = record(rawResult);
+    const event = parseEvents({ data: [result?.event] }, categories)[0];
+    const bonus = record(result?.bonus);
+    if (!event || !bonus || events.includes(event.code)) throw new Error("Invalid ingest event");
+    events.push(event.code);
+    Object.assign(items, parseStocks(event, bonus));
+    if (Object.keys(items).length > 5_000) throw new Error("Too many stock items");
+  }
+  return { checkedAt, events, items, errors: [] };
+}
+
+export function formatRestockSummary(stocks: Stock[]): string {
+  return [
+    "🔔 Restock terdeteksi",
+    ...stocks.map((stock) => [
+      `\n${stock.eventTitle}`,
+      `${stock.date} · ${stock.session}${stock.startTime ? ` (${stock.startTime} WIB)` : ""}`,
+      `${stock.lane || "Tanpa jalur"} · ${stock.member} — ${stock.quota} tersisa`,
+    ].join("\n")),
+  ].join("\n");
+}
+
 function stockKind(category: string): StockKind | null {
   if (category === "PHOTOCARD") return "mng";
   if (category === "TWO_SHOT") return "2shot";

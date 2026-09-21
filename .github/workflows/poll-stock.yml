@@ -1,0 +1,26 @@
+name: Poll JKT48 stock
+
+on:
+  schedule:
+    - cron: "3-59/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jkt48-stock-poller
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node scripts/poll.mjs
+        env:
+          WORKER_URL: https://jkt48-restock-notifier.estrella19.workers.dev
+          INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
